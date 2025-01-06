@@ -1,0 +1,995 @@
+#This fills a form with Random selections and inputs
+
+import random
+import time
+
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+
+from gmailconnect import get_most_recent_code
+
+service = ChromeService(ChromeDriverManager().install())
+options = webdriver.ChromeOptions()
+driver = webdriver.Chrome(service=service, options=options)
+
+creds_file = "credss.json"  # Path to your service account JSON file
+sender_email = "fundportaladmin@gunder.com"
+user_email = "Jessica@wildheartsqa.com"  # Gmail user to impersonate
+my_email = 'Jessica+Automation476@wildheartsqa.com'
+url = "https://stage-gunderson.flabprojects.com/login?f=6647856205d10f001409f9a1"
+driver.get(url)
+#driver.maximize_window()
+class CachedWebElement:
+    def __init__(self, driver, by, value):
+        self.driver = driver
+        self.by = by
+        self.value = value
+        self.element = None
+
+def locate_element(self):
+    self.element = self.driver.find_element(self.by, self.value)
+
+def get_element(self):
+    if self.element is None:
+        self.locate_element()
+    return self.element
+
+def click(self):
+    try:
+        self.get_element().click()
+    except StaleElementReferenceException:
+        self.locate_element()
+        self.element.click()
+
+def send_keys(self, keys):
+    try:
+        self.get_element().send_keys(keys)
+    except StaleElementReferenceException:
+        self.locate_element()
+        self.element.send_keys(keys)
+
+def text(self):
+    try:
+        return self.get_element().text
+    except StaleElementReferenceException:
+        self.locate_element()
+        return self.element.text
+
+def is_selected(self):
+    try:
+        return self.get_element().is_selected()
+    except StaleElementReferenceException:
+        self.locate_element()
+        return self.element.is_selected()
+actions = ActionChains(driver)
+timeout=20
+# Next buttons XPaths to try
+buttons = [
+    "//button[contains(text(),'Next')]",
+    "//button[normalize-space()='Next']"
+]
+# Function to click the next button
+def click_next(driver, timeout=10):
+    for xpath in buttons:
+        try:
+            # Wait until the button is clickable and retrieve it
+            button = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+            if button.is_enabled():
+                time.sleep(.2)
+                button.click()
+            print(f"clicked{xpath}")
+            return True  # Exit after a successful click
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            pass
+        except Exception as e:
+            pass
+    return False
+
+def clicked_next(driver):
+    tries = 0
+    max_retries = 10
+    while tries < max_retries:
+        try:
+            click_next(driver)
+            time.sleep(.2)
+            return  # Exit after a successful click
+        except (StaleElementReferenceException, NoSuchElementException, TimeoutException):
+            tries += 1
+            print(f"Button is not enabled, retrying...{tries}")
+    return False
+try:
+    # Wait for the popup close button to become clickable
+    popup_close_button = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, '//div[contains(@class, "absolute top-10 right-12")]/span[text()="x"]'))
+    )
+    #popup_close_button.click()
+    driver.execute_script("arguments[0].click();", popup_close_button)# Click to close the popup
+    print("Popup closed successfully.")
+except (StaleElementReferenceException, NoSuchElementException, TimeoutException):
+    print("Popup not detected or already dismissed.")
+
+try:
+    WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'email')))
+    email = driver.find_element(By.NAME, 'email')
+    time.sleep(2)
+    email.click()
+    time.sleep(.5)
+    email.send_keys(my_email)
+    time.sleep(3)
+    clicked_next(driver)
+except (NoSuchElementException, TimeoutException):(
+    print("Email input field not detected"))
+time.sleep(3)
+# Wait for the access code to be sent and retrieve it
+print("Waiting for access code...")
+access_code = get_most_recent_code(creds_file, sender_email, user_email)
+if not access_code:
+    print("Failed to retrieve access code.")
+
+# Input the retrieved access code
+try:
+    WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.XPATH, '/html/body/main/div[1]/section/form/div[1]/input[1]')))
+    access_code_input = driver.find_element(By.XPATH, '/html/body/main/div[1]/section/form/div[1]/input[1]')
+    access_code_input.click()
+    access_code_input.send_keys(access_code)
+    clicked_next(driver)
+    print("Access code submitted successfully.")
+except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+    print("Access code input field or Submit button not detected")
+
+def click_next_until_field_detected(driver, field_name):
+    max_attempts = 10
+    timeout = 5
+    interval = 1
+    attempts = 0
+    while attempts < max_attempts:
+        try:
+            # Check if the target field is present by NAME
+            target_field = WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.NAME, field_name))
+            )
+            if target_field:
+                return True
+        except (NoSuchElementException, TimeoutException):
+            try:
+                clicked_next(driver)
+                attempts += 1
+                time.sleep(interval)
+            except Exception as e:
+                print(f"Error while clicking 'Next': {e}")
+                return False
+
+    return False
+
+def click_next_until_xpath_found(driver, xpath1):
+    tries = 0
+    max_retries = 10
+    while tries < max_retries:
+        try:
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath1)))
+            time.sleep(.2)
+            return  # Exit after a successful click
+        except (StaleElementReferenceException, NoSuchElementException, TimeoutException):
+            print(f"Element not found retrying...{tries}")
+            clicked_next(driver)
+            tries+=1
+click_next_until_field_detected(driver, "name")
+# these are located by 'name'
+inputs_textfields = {
+    "name": "Jessie Smith",
+    #"email": f"Jessica+{random.randint(0, 999999)}@wildheartsqa.com",
+    "capitalCommitment": random.randint(100000,9999999999)
+}
+#limited Partner information
+def fill_input_fields_and_click_next(inputs_text_fields):
+
+    for field_name, value in inputs_text_fields.items():
+        try:
+            # Wait until the input field is present and clickable
+            input_field = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.NAME, field_name))
+            )
+            time.sleep(.5)
+            input_field.clear()
+            time.sleep(.2)
+            input_field.send_keys(value)
+            print(f"Filled '{field_name}' with '{value}'.")
+            clicked_next(driver)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException) :
+            print(f"Error with field '{field_name}'")
+fill_input_fields_and_click_next(inputs_textfields)
+
+individuals = [
+    'Natural Person6',
+    'IRA12',
+    'Joint Tenants with Right of Survivorship17',
+    'Tenants in Common18',
+    'Other - Individual20'
+]
+entity = [
+    'Business Trust16',
+    'Corporation1',
+    'Estate2',
+    'Fiduciary4',
+    'General Partnership11',
+    'Grantor Trust5',
+    'Irrevocable Trust15',
+    'Limited Liability Company7',
+    'Limited Liability Partnership9',
+    'Limited Partnership8',
+    'Nominee10',
+    'Other - Entity19',
+    'Revocable Trust14',
+    'S-Corporation13',
+    'US Tax-Exempt Organization3'
+]
+
+#Randomly choose a Org type and continue based on choice - If Other Individual or Other Entity first Enter GundersonFormFill then continue with logic
+# Logic = Natural Person, IRA, Joint tenants with rights of survivorship, Tenants in common or Other Individual - Principal Place of Residence. All others Choose Principal place of Business
+try:
+    WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.ID, 'Natural Person6')))
+except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+    print("No element found within the given time - consider extending the timeout duration")
+org_type_checkbox_id =individuals + entity
+org_selection = random.choice(org_type_checkbox_id)
+selected_org = driver.find_element(By.ID, org_selection)
+
+print(org_selection)
+
+actions = ActionChains(driver)
+actions.double_click(selected_org).perform()
+clicked_next(driver)
+
+if org_selection =='Other - Individual20' or org_selection =='Other - Entity19':
+    try:
+        WebDriverWait(driver,10).until(EC.presence_of_element_located((By.NAME, 'otherType'))).send_keys('Other')
+        clicked_next(driver)
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print("Other type field not found")
+    clicked_next(driver)
+time.sleep(5)
+
+def dropdown_select(dropdown_name, search_term):
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            # Wait for the dropdown to become visible and clickable
+            dropdown = WebDriverWait(driver, 15).until(
+                EC.element_to_be_clickable((By.NAME, dropdown_name))
+            )
+            dropdown.click()  # Open the dropdown
+            print(f"Dropdown '{dropdown_name}' clicked.")
+
+            # Wait for the search input field to appear
+            search_input = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.NAME, 'searchTerm'))
+            )
+            search_input.clear()
+            search_input.send_keys(search_term)
+            print(f"Search term '{search_term}' entered.")
+
+            # Wait for the option to appear and click it
+            option_xpath = f"//div[contains(text(),'{search_term}')]"
+            option = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, option_xpath))
+            )
+            option.click()
+            print(f"Option '{search_term}' selected.")
+            clicked_next(driver)
+            # Exit loop after successful selection
+            return True
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print(f"Attempt {attempt + 1}: Failed to interact with dropdown '{dropdown_name}'. Retrying...")
+        except Exception as e:
+            print(f"Error during dropdown interaction: {e}")
+    return False  # Return False after max retries
+
+
+#calls the function to handle dropdowns based on org type selection
+if org_selection in individuals:
+    WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'country')))
+    dropdown_select('country', "United States")
+    dropdown_select('principalPlaceOfResidence', "United States")
+    dropdown_select('principalPlaceOfResidencePrimaryContact', "North Carolina")
+if org_selection in entity:
+    dropdown_select('countryPlace', "United States")
+    dropdown_select('principalPlaceOfBusinessPrimaryContact', "North Carolina")
+
+primary_contact_input_by_name = {
+    "namePrimaryContact":"Jessica Smith",
+    "emailPrimaryContact":f"Jessica+{random.randint(000, 9999)}@wildheartsqa.com",
+    "phonePrimaryContact":random.randint(1111111111,9999999999),
+    "addressPrimaryContact":"4104 Rockside Hills Dr, Raleigh, NC 27604"
+}
+fill_input_fields_and_click_next(primary_contact_input_by_name)
+
+click_next_until_xpath_found(driver,'//input[@name="bankName"]')
+#wire instructions (if they are included)
+wire_instructions_included={
+    "bankName":"Wells Fargo",
+    "acctName": "Jessica's Wells Fargo Account",
+    "swiftCode":random.randint(111,999),
+    "acctNumber":random.randint(11111111,9999999999),
+    "bankaba":random.randint(1111111,9999999),
+    "furtherCredit":f"Jessica Smith {random.randint(1111111111,9999999999)}",
+    "location":"Raleigh, NC"
+}
+fill_input_fields_and_click_next(wire_instructions_included)
+
+click_next_until_xpath_found(driver,'//input[@value="id_investor_status_2_yes"]')
+selected_checkboxes = {}
+
+def handle_checkbox_group(driver, group, timeout=20):
+    """
+    Handles random selection of checkboxes from a group and proceeds to the next step.
+
+    Parameters:
+    - driver: Selenium WebDriver instance.
+    - group: A list of dictionaries with By and locator values for checkboxes.
+      Example: [{By.XPATH: "//input[@value='id_option_1']"}, {By.XPATH: "//input[@value='id_option_2']"}]
+    - timeout: Time to wait for elements to become visible (default is 20 seconds).
+    """
+    try:
+        # Wait for at least one checkbox in the group to become visible
+        WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located(group[0])  # Wait for the first checkbox
+        )
+
+        # Randomly select a checkbox from the group
+        choice = random.choice(group)
+        by, locator = choice
+        selected_checkbox = driver.find_element(by, locator)
+
+        # Click the selected checkbox
+        time.sleep(.8)
+        selected_checkbox.click()
+        time.sleep(.8)
+        clicked_next(driver)
+        print(f"Selected Checkbox: {locator}")
+        return selected_checkbox
+
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print("Checkboxes not visible within the timeout period.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+
+# Example Usage
+
+def us_securities_act(driver):
+
+    us_securities_checkboxes =[
+        (By.XPATH, '//input[@value="id_investor_status_2_yes"]'),
+        (By.XPATH,  '//input[@value="id_investor_status_2_no"]')
+        ]
+    handle_checkbox_group(driver, us_securities_checkboxes, timeout=20)
+us_securities_act(driver)
+
+def irc(driver):
+    irc_checkboxes = [
+        (By.XPATH,'//input[@value="id_investor_status_3_yes"]'),
+        (By.XPATH,'//input[@value="id_investor_status_3_no"]')
+        ]
+    handle_checkbox_group(driver, irc_checkboxes)
+irc(driver)
+
+def finra(driver):
+    finra_checkboxes = [
+        (By.XPATH,'//input[@value="id_investor_status_4_yes"]'),
+        (By.XPATH, '//input[@value="id_investor_status_4_no"]')
+        ]
+    handle_checkbox_group(driver, finra_checkboxes)
+clicked_next(driver)
+finra(driver)
+
+def handle_foia(driver, xpath_yes, xpath_no):
+    try:
+        WebDriverWait(driver, timeout=20).until(
+            EC.visibility_of_element_located((By.XPATH, xpath_yes))
+        )
+        yes_checkbox = driver.find_element(By.XPATH, xpath_yes)
+        no_checkbox = driver.find_element(By.XPATH, xpath_no)
+        choice = random.choice([yes_checkbox, no_checkbox])
+        try:
+            choice.click()
+        except StaleElementReferenceException:
+            # Re-locate elements in case of stale reference
+            yes_checkbox = driver.find_element(By.XPATH, xpath_yes)
+            no_checkbox = driver.find_element(By.XPATH, xpath_no)
+            choice = random.choice([yes_checkbox, no_checkbox])
+            choice.click()
+        print(f"Selected: {choice == yes_checkbox}")
+        WebDriverWait(driver, timeout=10).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        clicked_next(driver)
+        return "yes_checkbox" if choice == yes_checkbox else "no_checkbox"
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print(f"Checkboxes not visible for XPATHs: {xpath_yes}, {xpath_no}")
+        return None
+
+
+# Define the functions for each step
+def foia_a(driver): return handle_foia(driver, '//input[@value="id_investor_status_5_a_yes"]', '//input[@value="id_investor_status_5_a_no"]')
+def foia_b(driver): return handle_foia(driver, '//input[@value="id_investor_status_5_b_yes"]', '//input[@value="id_investor_status_5_b_no"]')
+def foia_c(driver): return handle_foia(driver, '//input[@value="id_investor_status_5_c_yes"]', '//input[@value="id_investor_status_5_c_no"]')
+def foia_d(driver): return handle_foia(driver, '//input[@value="id_investor_status_5_d_yes"]', '//input[@value="id_investor_status_5_d_no"]')
+def foia_e(driver): return handle_foia(driver, '//input[@value="id_investor_status_5_e_yes"]', '//input[@value="id_investor_status_5_e_no"]')
+def foia_f(driver): return handle_foia(driver, '//input[@value="id_investor_status_5_f_yes"]', '//input[@value="id_investor_status_5_f_no"]')
+
+# List of functions to execute
+functions = [foia_a, foia_b, foia_c, foia_d, foia_e]
+
+# Execute each function with a delay in between
+run_foia_f = False
+for func in functions:
+    selected_checkbox = func(driver)
+    if selected_checkbox == "yes_checkbox":
+        run_foia_f = True
+    time.sleep(3)  # Add delay between function calls
+
+# Check if foia_f needs to run
+if run_foia_f:
+    foia_f(driver)
+
+
+def bad_actor(driver):
+    bad_actor_checkboxes = [
+        (By.XPATH, '//input[@value="id_investor_status_6_yes"]'),
+        (By.XPATH, '//input[@value="id_investor_status_6_no"]')
+        ]
+    handle_checkbox_group(driver, bad_actor_checkboxes)
+
+bad_actor(driver)
+#Form PF
+advisors_act_reporting_options = [
+    'id_investor_status_7_tcg_a',
+    'id_investor_status_7_tcg_b',
+    'id_investor_status_7_tcg_c',
+    'id_investor_status_7_tcg_d',
+    'id_investor_status_7_tcg_e',
+    'id_investor_status_7_tcg_f',
+    'id_investor_status_7_tcg_g',
+    'id_investor_status_7_tcg_h',
+    'id_investor_status_7_tcg_i',
+    'id_investor_status_7_tcg_j',
+    'id_investor_status_7_tcg_k',
+    'id_investor_status_7_tcg_l',
+    'id_investor_status_7_tcg_m',
+    'id_investor_status_7_tcg_n',
+    'id_investor_status_7_tcg_o'
+    ]
+aa_choice = random.choice(advisors_act_reporting_options)
+search_term = {
+    "Individual that is a United States person (or a trust of such person)": "//div[normalize-space(text())='Individual that is a United States person (or a trust of such person)']",
+    "Individual that is not a United States person (or a trust of such person)": "//div[normalize-space(text())='Individual that is not a United States person (or a trust of such person)']",
+    "Broker-dealer": "//div[normalize-space(text())='Broker-dealer']",
+    "Insurance company": "//div[normalize-space(text())='Insurance company']",
+    "Investment company registered with the SEC": "//div[normalize-space(text())='Investment company registered with the SEC']",
+    "Private fund": "//div[normalize-space(text())='Private fund']",
+    "Non-profit": "//div[normalize-space(text())='Non-profit']",
+    "Pension plan (excluding governmental pension plan)": "//div[normalize-space(text())='Pension plan (excluding governmental pension plan)']",
+    "Banking or thrift institution (proprietary)": "//div[normalize-space(text())='Banking or thrift institution (proprietary)']"
+}
+
+
+
+
+# Additional actions if the selected choice requires further input
+if aa_choice != 'id_investor_status_7_tcg_m':  # Corrected the comparison
+    try:
+        WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.NAME, aa_choice)))
+        my_choice = driver.find_element(By.NAME, aa_choice)
+        time.sleep(.5)
+        my_choice.click()
+        print(f"Selected: {aa_choice}")
+        time.sleep(.5)
+        clicked_next(driver)
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print(f"Could not find the option for: {aa_choice}")
+    else:
+        if aa_choice == 'id_investor_status_7_tcg_or':
+            try:
+                # Wait for the input field to be visible
+                search_input = WebDriverWait(driver, 20).until(
+                    EC.visibility_of_element_located((By.NAME, 'searchTerm'))  # Adjust the locator if necessary
+                )
+                # Randomly choose a search term and its corresponding XPath
+                chosen_search_term = random.choice(list(search_term.keys()))
+                xpath = search_term[chosen_search_term]
+
+                # Send the chosen search term to the input field
+                search_input.clear()
+                search_input.send_keys(chosen_search_term)
+                print(f"Entered search term: {chosen_search_term}")
+
+                # Wait for the associated option to appear and click it
+                associated_option = WebDriverWait(driver, 10).until(
+                    EC.visibility_of_element_located((By.XPATH, xpath))
+                )
+                associated_option.click()
+                print(f"Clicked option: {chosen_search_term}")
+
+            except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+                print(f"Could not find the option for: {aa_choice}")
+else:
+    try:
+        # Wait for the chosen option to be clickable and click it
+        WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.NAME, aa_choice)))
+
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print("Form PF is not included.")
+
+#Section C - Individual
+individual_investor_reps = [
+    'id_investor_representations_1',
+    'id_investor_representations_2',
+    'id_investor_representations_10',
+    'id_investor_representations_13',
+    'id_investor_representations_or'
+]
+# Section D - Individual
+individual_purchaser_rep = [
+    'id_purchase_representations_1',
+    'id_purchase_representations_4',
+    'id_purchase_representations_or'
+]
+# Section C - Entity
+entity_investor_reps = [
+    'id_investor_representations_3',
+    'id_investor_representations_4',
+    'id_investor_representations_5',
+    'id_investor_representations_6',
+    'id_investor_representations_6_extra',
+    'id_investor_representations_7',
+    'id_investor_representations_8',
+    'id_investor_representations_9',
+    'id_investor_representations_11',
+    'id_investor_representations_12',
+    'id_investor_representations_or',
+]
+
+#Section D - Entity
+entity_purchaser_reps = [
+    'id_purchase_representations_2',
+    'id_purchase_representations_3',
+    'id_purchase_representations_4',
+    'id_purchase_representations_7',
+    'id_purchase_representations_5',
+    'id_purchase_representations_6',
+    'id_purchase_representations_or'
+]
+#Section E
+qualified_client_rep_options = [
+    'id_client_representations_1',
+    'id_client_representations_2',
+    'id_client_representations_or'
+]
+
+def individual_investor_purchaser(driver):
+    individual_investor_selected_option = random.choice(individual_investor_reps)
+
+    def individual_investor(driver):
+        try:
+            WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_investor_representations_or')))
+            individual_investor_selected = driver.find_element(By.NAME, individual_investor_selected_option)
+            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", individual_investor_selected)
+            individual_investor_selected.click()
+            print(f"Selected: {individual_investor_selected}")
+            time.sleep(.5)
+            clicked_next(driver)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Accredited Investor - Individual - Didn't locate element")
+        return individual_investor_selected_option
+    individual_investor(driver)
+    individual_purchase_rep = random.choice(individual_purchaser_rep)
+
+    def individual_qualified_purchaser_reps(driver):
+        try:
+            WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_purchase_representations_or')))
+            individual_purchase_representations = driver.find_element(By.NAME, individual_purchase_rep)
+            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", individual_purchase_representations)
+            individual_purchase_representations.click()
+            print(f"Selected: {individual_purchase_rep}")
+            time.sleep(.5)
+            clicked_next(driver)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Qualified purchaser - Didn't locate element, consider extending the timeout")
+            clicked_next(driver)
+        return individual_purchase_rep
+    individual_qualified_purchaser_reps(driver)
+    if individual_investor_selected_option == 'id_investor_representations_or' or individual_purchase_rep == 'id_purchase_representations_or':
+        try:
+            WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_client_representations_or')))
+            client_rep = random.choice(qualified_client_rep_options)
+            selected_client_rep = driver.find_element(By.NAME, client_rep)
+            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", selected_client_rep)
+            selected_client_rep.click()
+            time.sleep(.5)
+            print(f"Selected: {client_rep}")
+            clicked_next(driver)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Individual Qualified Client - Didn't locate element, consider extending the timeout")
+    else:
+        if individual_investor_selected_option != 'id_investor_representations_or' or individual_purchase_rep != 'id_purchase_representations_or':
+            print("Skipping to section F")
+            click_next_until_xpath_found(driver, '//input[@id="id_foreign_person_or6"]')
+
+
+def entity_investor_purchaser(driver):
+    section_c_selected_option = random.choice(entity_investor_reps)
+
+    def entity_investor(driver):
+        try:
+            WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_investor_representations_or')))
+            selected = driver.find_element(By.NAME, section_c_selected_option)
+            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", selected)
+            selected.click()
+            time.sleep(.5)
+            print(f"Selected: {section_c_selected_option}")
+            clicked_next(driver)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Section C - Accredited Investor - Didn't locate element, consider extending the timeout")
+        return section_c_selected_option
+    entity_investor(driver)
+    time.sleep(.6)
+    entity_purchase_rep = random.choice(entity_purchaser_reps)
+
+    def qualified_purchaser_reps(driver):
+        try:
+            WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_purchase_representations_or')))
+            entity_purchase_representations = driver.find_element(By.NAME, entity_purchase_rep)
+            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", entity_purchase_representations)
+            entity_purchase_representations.click()
+            time.sleep(.5)
+            print(f"Selected: {entity_purchase_rep}")
+            clicked_next(driver)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Qualified Purchaser - Didn't locate element, consider extending the timeout")
+            clicked_next(driver)
+        return entity_purchase_rep
+    qualified_purchaser_reps(driver)
+    def section_e(section_c_selected_option, entity_purchase_rep):
+        if section_c_selected_option == 'id_investor_representations_or' or entity_purchase_rep == 'id_purchase_representations_or':
+            try:
+                WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_client_representations_or')))
+                client_rep = random.choice(qualified_client_rep_options)
+                selected_client_rep = driver.find_element(By.NAME, client_rep)
+                driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", selected_client_rep)
+                selected_client_rep.click()
+                time.sleep(.5)
+                print(f"Selected: {client_rep}")
+                clicked_next(driver)
+            except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+                print("Entity Qualified Client - Didn't locate element, consider extending the timeout")
+
+
+    section_e(section_c_selected_option, entity_purchase_rep)
+
+if org_selection in individuals:
+    individual_investor_purchaser(driver)
+if org_selection in entity:
+    entity_investor_purchaser(driver)
+clicked_next(driver)
+
+# CFIUS
+# cfius_individual_options = [
+#
+#     (By.NAME,'id_foreign_person_or')
+# ]
+def randomly_select_element(driver, xpath):
+    """
+    Finds elements by XPath, randomly selects, and clicks one.
+    """
+    try:
+        time.sleep(3)
+        elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.XPATH, xpath))
+        )
+        element = random.choice(elements)
+        driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", element)
+        WebDriverWait(driver, 5).until(EC.element_to_be_clickable(element)).click()
+        print(f"Selected and clicked element with text: {element.text}")
+        return element
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print(f"No elements found for XPath: {xpath}")
+    return None
+time.sleep(3)
+clicked_next(driver)
+cfius_xpath = '//input[@data-testid="form-element-checkbox"]'
+randomly_select_element(driver, cfius_xpath)
+
+# def individual_foreign_person(driver):
+#     try:
+#         WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_foreign_person_or')))
+#         handle_checkbox_group(driver, cfius_individual_options)
+#     except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+#         print("CFIUS - Individual Foreign Person not found")
+#
+# def entity_foreign_person(driver):
+#     try:
+#         WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_foreign_person_or')))
+#         handle_checkbox_group(driver, cfius_entity_options)
+#         time.sleep(1)
+#         entity_fp_checkboxes = [
+#             (By.XPATH, '//input[@value="id_foreign_person_2_1_yes"]'),
+#             (By.XPATH, '//input[@value="id_foreign_person_2_1_no"]')
+#         ]
+#         handle_checkbox_group(driver, entity_fp_checkboxes)
+#         clicked_next(driver)
+#     except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+#         print("CFIUS - Entity Foreign Person not found")
+#
+#
+# if org_selection in individuals:
+#     individual_foreign_person(driver)
+# if org_selection in entity:
+#     entity_foreign_person(driver)
+def checkboxes_external_variables(driver, selected_checkbox):
+    try:
+        WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.XPATH, selected_checkbox)))
+        by, locator = selected_checkbox
+        checkbox = driver.find_element(by, locator)
+        checkbox.click()
+        time.sleep(.5)
+        clicked_next(driver)
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print(f"Checkbox '{selected_checkbox}' not found")
+
+def wiring_bank_status(driver):
+    wiring_bank_checkboxes = [
+        (By.XPATH, '//input[@value="id_wiring_bank_status_1_yes"]'),
+        (By.XPATH, '//input[@value="id_wiring_bank_status_1_no"]')
+    ]
+    wiring_bank_status_selected_checkbox = random.choice(wiring_bank_checkboxes)
+    wbss = driver.find_element(By.XPATH, wiring_bank_status_selected_checkbox)
+    checkboxes_external_variables(driver, wbss)
+    if wiring_bank_status_selected_checkbox == 'id_wiring_bank_status_1_no':
+        try:
+            WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located((By.NAME, 'id_wiring_bank_status_1_opt')))
+            non_fatf = {
+                'id_wiring_bank_status_1_opt': "USA"
+            }
+            fill_input_fields_and_click_next(non_fatf)
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Non FATF country not found")
+    try:
+        WebDriverWait(driver, timeout=20).until(EC.visibility_of_element_located( (By.XPATH, '//input[@value="id_wiring_bank_status_2_yes"]')))
+        wiring_bank2_checkboxes = [
+            (By.XPATH, '//input[@value="id_wiring_bank_status_2_yes"]'),
+            (By.XPATH, '//input[@value="id_wiring_bank_status_2_no"]')
+        ]
+        handle_checkbox_group(driver, wiring_bank2_checkboxes)
+    except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+        print("Wiring bank status 2 not found")
+wiring_bank_status(driver)
+
+
+def section_h(driver):
+
+    click_next_until_xpath_found(driver, '//input[@value="id_special_entities_1_a_yes"]')
+    def erisa():
+        # ERISA A
+        try:
+            WebDriverWait(driver, timeout=20).until(
+                EC.visibility_of_element_located((By.XPATH, '//input[@value="id_special_entities_1_a_yes"]'))
+            )
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Didn't locate element, consider extending the timeout")
+
+        erisa_a_checkbox = [
+            (By.XPATH, '//input[@value="id_special_entities_1_a_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_1_a_no"]')
+            ]
+        erisa_a_choice = random.choice(erisa_a_checkbox)
+        ea_choice = driver.find_element(erisa_a_choice)
+        checkboxes_external_variables(driver, ea_choice)
+
+        # ERISA B
+        if erisa_a_choice == '//input[@value="id_special_entities_1_a_no"]':
+            try:
+                WebDriverWait(driver, timeout=20).until(
+                    EC.visibility_of_element_located((By.XPATH, '//input[@value="id_special_entities_1_b_yes"]'))
+                )
+            except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+                print("Didn't locate element, consider extending the timeout")
+
+        erisa_b_checkbox = [
+            (By.XPATH, '//input[@value="id_special_entities_1_b_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_1_b_no"]')
+        ]
+        erisa_b_choice = random.choice(erisa_b_checkbox)
+        eb_choice = driver.find_element(erisa_b_choice)
+        checkboxes_external_variables(driver, eb_choice)
+        # ERISA C
+        if erisa_b_choice == '//input[@value="id_special_entities_1_b_yes"]':
+            try:
+                WebDriverWait(driver, timeout=20).until(
+                    EC.visibility_of_element_located((By.NAME, 'id_special_entities_1_b_opt'))
+                )
+                plan_assets = {
+                    'id_special_entities_1_b_opt': str(random.randint(1, 100))
+                }
+                fill_input_fields_and_click_next(plan_assets)
+            except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+                print("Didn't locate element, consider extending the timeout")
+    erisa()
+
+    def lookthrough_entities_handling():
+        # Potential look through entity A
+        lookthrough_a_checkboxes = [
+            (By.XPATH, '//input[@value="id_special_entities_2_a_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_2_a_no"]')
+        ]
+        lookthrough_a_choice = random.choice(lookthrough_a_checkboxes)
+        look_a_choice = driver.find_element(lookthrough_a_choice)
+        checkboxes_external_variables(driver, look_a_choice)
+
+        try:
+            WebDriverWait(driver, timeout=20).until(
+                EC.visibility_of_element_located((By.XPATH, '//input[@value="id_special_entities_2_b_yes"]'))
+            )
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Didn't locate element, consider extending the timeout")
+
+        # Potential look through entity B
+        lookthrough_b_checkboxes = [
+            (By.XPATH, '//input[@value="id_special_entities_2_b_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_2_b_no"]')
+            ]
+        lookthrough_b_choice = random.choice(lookthrough_b_checkboxes)
+        look_b_choice = driver.find_element(lookthrough_b_choice)
+        checkboxes_external_variables(driver, look_b_choice)
+        try:
+            WebDriverWait(driver, timeout=20).until(
+                EC.visibility_of_element_located((By.XPATH, '//input[@value="id_special_entities_2_c_yes"]'))
+            )
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Didn't locate element, consider extending the timeout")
+
+        # Potential look through entity C
+        lookthrough_c_checkbox = [
+            (By.XPATH, '//input[@value="id_special_entities_2_c_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_2_c_no"]')
+        ]
+        lookthrough_c_choice = random.choice(lookthrough_c_checkbox)
+        look_c_choice = driver.find_element(lookthrough_c_choice)
+        checkboxes_external_variables(driver, look_c_choice)
+
+        try:
+            WebDriverWait(driver, timeout=20).until(
+                EC.visibility_of_element_located((By.XPATH, '//input[@value="id_special_entities_2_d_yes"]'))
+            )
+        except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+            print("Didn't locate element, consider extending the timeout")
+
+        # Potential look through entity D
+        lookthrough_d_checkbox = [
+            (By.XPATH, '//input[@value="id_special_entities_2_d_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_2_d_no"]')
+        ]
+        lookthrough_d_choice = random.choice(lookthrough_d_checkbox)
+        look_d_choice = driver.find_element(lookthrough_d_choice)
+        checkboxes_external_variables(driver, look_d_choice)
+
+        if (lookthrough_a_choice == '//input[@value="id_special_entities_2_a_yes"]' or
+                lookthrough_b_choice == '//input[@value="id_special_entities_2_b_yes"]' or
+                lookthrough_c_choice == '//input[@value="id_special_entities_2_c_yes"]' or
+                lookthrough_d_choice == '//input[@value="id_special_entities_2_d_yes"]'):
+            #number of owners then government entity
+            try:
+                WebDriverWait(driver, timeout=20).until(
+                    EC.visibility_of_element_located((By.NAME, 'id_special_entities_2_e_opt'))
+                )
+                lookthrough_e = {
+                    'id_special_entities_2_e_opt': str(random.randint(1, 100))
+                }
+                fill_input_fields_and_click_next(lookthrough_e)
+            except (NoSuchElementException, TimeoutException, StaleElementReferenceException):
+                print("Didn't locate element, consider extending the timeout")
+
+        lookthrough_entities_handling()
+
+            #skip number of owners and go straight to Government entity
+    def government_entity_handling():
+        gvt_entity_checkboxes = [
+            (By.XPATH, '//input[@value="id_special_entities_3_a_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_3_a_no"]')
+        ]
+        handle_checkbox_group(driver, gvt_entity_checkboxes)
+    government_entity_handling()
+
+    def bankholding_partner():
+        bank_partner = [
+            (By.XPATH, '//input[@value="id_special_entities_4_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_4_no"]')
+        ]
+        handle_checkbox_group(driver, bank_partner)
+    bankholding_partner()
+
+    def private_foundation_partner():
+        private_foundation = [
+            (By.XPATH, '//input[@value="id_special_entities_5_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_5_no"]')
+        ]
+        handle_checkbox_group(driver, private_foundation)
+    private_foundation_partner()
+
+    def public_pension_partner():
+        public_pension = [
+            (By.XPATH, '//input[@value="id_special_entities_6_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_6_no"]')
+        ]
+        handle_checkbox_group(driver, public_pension)
+    public_pension_partner()
+
+    def funds_of_funds():
+        fof = [
+            (By.XPATH, '//input[@value="id_special_entities_7_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_7_no"]')
+        ]
+        handle_checkbox_group(driver, fof)
+    funds_of_funds()
+
+    def tax_exempt_partner():
+        tax_exempt = [
+            (By.XPATH, '//input[@value="id_special_entities_8_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_8_no"]')
+        ]
+        handle_checkbox_group(driver, tax_exempt)
+    tax_exempt_partner()
+
+
+    def flow_through_entity():
+        flow_a = [
+            (By.XPATH, '//input[@value="id_special_entities_9_a_yes"]'),
+            (By.XPATH, '//input[@value="id_special_entities_9_a_no"]')
+        ]
+        flow_a_choice = random.choice(flow_a)
+        fa_choice = driver.find_element(flow_a_choice)
+        checkboxes_external_variables(driver, fa_choice)
+
+        if flow_a_choice == '//input[@value="id_special_entities_9_a_yes"]':
+            flow_b = [
+                (By.XPATH, '//input[@value="id_special_entities_9_b_yes"]'),
+                (By.XPATH, '//input[@value="id_special_entities_9_b_no"]')
+            ]
+            handle_checkbox_group(driver, flow_b)
+            flow_c = [
+                (By.XPATH, '//input[@value="id_special_entities_9_c_yes"]'),
+                (By.XPATH, '//input[@value="id_special_entities_9_no"]')
+            ]
+            handle_checkbox_group(driver, flow_c)
+    flow_through_entity()
+if org_selection in entity:
+    section_h(driver)
+#Miscellaneous section requires click next only
+
+#Exceptions to representations and warranties is optional
+click_next_until_field_detected(driver, 'signatoryName')
+def name_of_signatory(driver):
+    signatory_input = {
+        'signatoryName': "Jessica Armstrong",
+        'signatoryTitle': "CEO"
+    }
+
+    fill_input_fields_and_click_next(signatory_input)
+
+    signatory_email = driver.find_element(By.NAME, 'signatoryEmail')
+    signatory_email.clear()
+    signatory_email.send_keys(f"Jessica+{random.randint(000, 9999)}@wildheartsqa.com")
+    signatures_button = driver.find_element(By.XPATH,  "//button[contains(text(),'Signatures')]")
+    signatures_button.click()
+
+name_of_signatory(driver)
+time.sleep(30)
+driver.quit()
